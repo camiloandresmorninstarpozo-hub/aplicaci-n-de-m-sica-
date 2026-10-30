@@ -54,7 +54,7 @@ jobs:
             <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
             <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
             <uses-permission android:name="android.permission.WAKE_LOCK"/>
-            <application android:label="JKMUSICK" android:allowBackup="true" android:theme="@android:style/Theme.Material.NoActionBar">
+            <application android:label="JKMUSICK" android:icon="@drawable/ic_launcher" android:allowBackup="true" android:theme="@android:style/Theme.Material.NoActionBar">
               <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden">
                 <intent-filter>
                   <action android:name="android.intent.action.MAIN"/>
@@ -93,6 +93,50 @@ jobs:
           }
           EOF
           cp MainActivity.kt app/src/main/java/com/jk/music/MainActivity.kt
+      - name: Icono
+        run: |
+          python3 - <<'PY'
+          import os
+          pal={'o':'#1E0F40','p':'#6E49B8','l':'#9F7BEA','w':'#FFFFFF'}
+          L=[1]*10+[2,3,4,5,6,7]; R=[14]*10+[13,12,11,10,9,8]
+          def ins(x,y): return 0<=y<16 and L[y]<=x<=R[y]
+          g=[['.']*16 for _ in range(16)]
+          for y in range(16):
+            for x in range(16):
+              if ins(x,y):
+                e=not(ins(x-1,y) and ins(x+1,y) and ins(x,y-1) and ins(x,y+1))
+                g[y][x]='o' if e else ('l' if y<=3 else 'p')
+          for x,h in [(3,2),(5,3),(7,5),(8,5),(10,3),(12,2)]:
+            for y in range(8-h,8+h):
+              if g[y][x] in 'pl': g[y][x]='w'
+          runs=[]
+          for y in range(16):
+            x=0
+            while x<16:
+              c=g[y][x]
+              if c=='.':
+                x+=1; continue
+              n=1
+              while x+n<16 and g[y][x+n]==c: n+=1
+              runs.append('<path android:fillColor="%s" android:pathData="M%d,%dh%dv1h-%dz"/>'%(pal[c],x,y,n,n))
+              x+=n
+          H='<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="%d" android:viewportHeight="%d">'
+          BG='<path android:fillColor="#17141F" android:pathData="M0,0h%dv%dh-%dz"/>'
+          d='app/src/main/res/'
+          os.makedirs(d+'drawable',exist_ok=True); os.makedirs(d+'drawable-anydpi-v26',exist_ok=True)
+          open(d+'drawable/ic_launcher.xml','w').write('\n'.join([H%(16,16),BG%(16,16,16)]+runs+['</vector>']))
+          open(d+'drawable/ic_fg.xml','w').write('\n'.join([H%(28,28),'<group android:translateX="6" android:translateY="6">']+runs+['</group>','</vector>']))
+          open(d+'drawable/ic_bg.xml','w').write('\n'.join([H%(28,28),BG%(28,28,28),'</vector>']))
+          open(d+'drawable-anydpi-v26/ic_launcher.xml','w').write('<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@drawable/ic_bg"/><foreground android:drawable="@drawable/ic_fg"/></adaptive-icon>')
+          try:
+            from PIL import Image
+            im=Image.new('RGB',(16,16),(23,20,31))
+            for y in range(16):
+              for x in range(16):
+                if g[y][x]!='.': im.putpixel((x,y),tuple(int(pal[g[y][x]][i:i+2],16) for i in (1,3,5)))
+            im.resize((256,256),Image.NEAREST).save('/mnt/user-data/outputs/icono-app.png')
+          except Exception as e: print('sin preview',e)
+          PY
       - name: Compilar
         run: gradle assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
