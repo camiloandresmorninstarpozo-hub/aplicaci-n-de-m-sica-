@@ -56,6 +56,7 @@ jobs:
             <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
             <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
             <uses-permission android:name="android.permission.WAKE_LOCK"/>
+            <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
             <application android:label="JKMUSICK" android:icon="@drawable/ic_launcher" android:allowBackup="true" android:theme="@android:style/Theme.Material.NoActionBar">
               <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden">
                 <intent-filter>
@@ -72,6 +73,10 @@ jobs:
           cat > app/src/main/java/com/jk/music/PlayService.kt <<'EOF'
           package com.jk.music
 
+          import android.media.AudioManager
+          import android.media.audiofx.Equalizer
+          import android.os.Handler
+          import android.os.Looper
           import androidx.media3.common.AudioAttributes
           import androidx.media3.common.C
           import androidx.media3.exoplayer.ExoPlayer
@@ -80,14 +85,37 @@ jobs:
 
           class PlayService : MediaSessionService() {
             private var session: MediaSession? = null
+
+            companion object {
+              @Volatile var eq: Equalizer? = null
+              private var player: ExoPlayer? = null
+              private val h = Handler(Looper.getMainLooper())
+              private val stopper = Runnable { player?.pause() }
+              fun sleep(min: Int) { h.removeCallbacks(stopper); if (min > 0) h.postDelayed(stopper, min * 60000L) }
+              fun setBand(i: Int, l: Int) { try { eq?.setBandLevel(i.toShort(), l.toShort()) } catch (e: Exception) {} }
+            }
+
             override fun onCreate() {
               super.onCreate()
               val attrs = AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build()
               val p = ExoPlayer.Builder(this).setAudioAttributes(attrs, true).setHandleAudioBecomingNoisy(true).setWakeMode(C.WAKE_MODE_LOCAL).build()
+              player = p
+              try {
+                val sid = (getSystemService(AUDIO_SERVICE) as AudioManager).generateAudioSessionId()
+                p.audioSessionId = sid
+                val e = Equalizer(0, sid)
+                e.enabled = true
+                val sp = getSharedPreferences("p", 0)
+                for (i in 0 until e.numberOfBands.toInt()) e.setBandLevel(i.toShort(), sp.getInt("eq" + i, 0).toShort())
+                eq = e
+              } catch (e: Exception) { eq = null }
               session = MediaSession.Builder(this, p).build()
             }
             override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
             override fun onDestroy() {
+              h.removeCallbacks(stopper)
+              try { eq?.release() } catch (e: Exception) {}
+              eq = null; player = null
               session?.let { it.player.release(); it.release() }
               session = null
               super.onDestroy()
