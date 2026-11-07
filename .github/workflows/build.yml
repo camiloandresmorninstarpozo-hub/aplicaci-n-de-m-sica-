@@ -12,21 +12,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Crear proyecto
-        run: |
-          mkdir -p app/src/main/java/com/jk/music
-          cat > settings.gradle.kts <<'EOF'
-          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-          dependencyResolutionManagement { repositories { google(); mavenCentral() } }
-          rootProject.name = "JKMUSICK"
-          include(":app")
-          EOF
-          cat > build.gradle.kts <<'EOF'
-          plugins {
-            id("com.android.application") version "8.5.2" apply false
-            id("org.jetbrains.kotlin.android") version "1.9.24" apply false
-          }
-          EOF
-          cat > gradle.properties <<'EOF'
-          android.useAndroidX=true
-          org.gradle.jvmargs=-Xmx3g
+      - run: bash setup.sh
+      - run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JKMUSICK-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
